@@ -191,6 +191,7 @@
           ? Object.entries(message).filter(([k]) => !/token|secret/i.test(k)).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
           : String(message ?? '');
         log(`[이벤트] ${action}${fields ? ' : ' + fields.slice(0, 300) : ''}`);
+        fetch('/diag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, fields: fields.slice(0, 1000) }) }).catch(() => {});
       }
       if (action === 'LOGIN') log('SOOP 채팅 로그인 이벤트 수신');
       if (action === 'JOIN') reportProfile(message?.userId, message?.userNickname, 'JOIN');

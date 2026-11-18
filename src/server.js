@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { handleDonation } from './donation-handler.js';
 
@@ -61,6 +62,7 @@ app.post('/event', async (req, res) => {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || `Central HTTP ${response.status}`);
+      diagLog(`[event] 별풍선 ${balloons}개 (${soopId}) → Central ${data.duplicate ? '중복' : JSON.stringify(data.rewards || [])}`);
       return res.json({ ok: true, forwarded: 'central', soopId, balloons, duplicate: Boolean(data.duplicate), rewards: data.rewards || [] });
     }
 
@@ -68,8 +70,31 @@ app.post('/event', async (req, res) => {
     return res.json({ ok: true, forwarded: 'smapi', soopId, balloons, result });
   } catch (error) {
     console.error('[StardewSOOPBridge] 후원 이벤트 처리 실패:', error?.message || error);
+    diagLog(`[event] 처리 실패: ${error?.message || error} (body=${JSON.stringify(req.body || {}).slice(0, 300)})`);
     return res.status(502).json({ ok: false, error: error?.message || '후원 이벤트 전달에 실패했습니다.' });
   }
+});
+
+// 진단 기록: 브라우저가 받은 SOOP 이벤트와 /event 처리 결과를 logs/sdk-events.log에 남긴다.
+const logDir = path.resolve(here, '../logs');
+const eventLogFile = path.join(logDir, 'sdk-events.log');
+function diagLog(line) {
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    if (fs.existsSync(eventLogFile) && fs.statSync(eventLogFile).size > 1024 * 1024) fs.renameSync(eventLogFile, eventLogFile + '.old');
+    fs.appendFileSync(eventLogFile, `${new Date().toISOString()} ${line}\n`, 'utf8');
+  } catch (error) {
+    console.error('[StardewSOOPBridge] 진단 기록 실패:', error?.message || error);
+  }
+}
+
+app.post('/diag', (req, res) => {
+  const origin = req.get('origin');
+  if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ ok: false });
+  const action = String(req.body?.action || '').slice(0, 60);
+  const fields = String(req.body?.fields || '').replace(/[\r\n]+/g, ' ').slice(0, 1000);
+  if (action) diagLog(`[sdk] ${action} : ${fields}`);
+  res.json({ ok: true });
 });
 
 // 브라우저가 SOOP 채팅 접속(JOIN) 때 받은 본인 닉네임을 보내면 Central로 전달한다.
