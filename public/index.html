@@ -221,7 +221,11 @@
       }).then(async (response) => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-        log(`스타듀밸리 브리지 전달 성공 (${balloons}개, ${soopId})`);
+        const names = { chest: '일반 상자', premiumChest: '고급 상자', monster: '몬스터' };
+        const summary = (data.rewards || []).map((r) => `${names[r.rewardType] || r.rewardType} ${r.amount}개`).join(', ');
+        log(data.forwarded === 'central'
+          ? `관리자 서버 전달 성공 (별풍선 ${balloons}개, ${soopId}) → ${data.duplicate ? '이미 처리된 후원' : (summary || '보상 기준 미달')}`
+          : `스타듀밸리 브리지 전달 성공 (${balloons}개, ${soopId})`);
       }).catch((error) => log(`스타듀밸리 전달 실패: ${error?.message || error}`));
     });
   }

@@ -50,8 +50,22 @@ app.post('/event', async (req, res) => {
     if (!soopId || soopId.length > 100) return res.status(400).json({ ok: false, error: 'SOOP 방송 ID(bjId)가 없거나 올바르지 않습니다.' });
     if (!Number.isSafeInteger(balloons) || balloons <= 0) return res.status(400).json({ ok: false, error: 'balloons는 양의 정수여야 합니다.' });
 
+    // Central이 설정되어 있으면 Central로 보낸다. 보상 기준(config/rules.json)과 대기열은 Central이 관리하고,
+    // 게임 서버 모드가 Central에서 작업을 가져간다. 설정이 없으면 예전처럼 게임 모드로 직접 보낸다.
+    if (centralUrl && agentToken) {
+      const response = await fetch(`${centralUrl}/api/agent/donation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Token': agentToken },
+        body: JSON.stringify({ eventId, soopId, balloons }),
+        signal: AbortSignal.timeout(5000)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Central HTTP ${response.status}`);
+      return res.json({ ok: true, forwarded: 'central', soopId, balloons, duplicate: Boolean(data.duplicate), rewards: data.rewards || [] });
+    }
+
     const result = await handleDonation({ eventId, soopId, balloons });
-    return res.json({ ok: true, forwarded: true, soopId, balloons, result });
+    return res.json({ ok: true, forwarded: 'smapi', soopId, balloons, result });
   } catch (error) {
     console.error('[StardewSOOPBridge] 후원 이벤트 처리 실패:', error?.message || error);
     return res.status(502).json({ ok: false, error: error?.message || '후원 이벤트 전달에 실패했습니다.' });
