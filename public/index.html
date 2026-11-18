@@ -185,6 +185,13 @@
     });
 
     chat.handleMessageReceived((action, message) => {
+      // 진단용: 채팅 메시지를 뺀 모든 이벤트의 이름과 필드를 기록한다 (후원이 안 들어올 때 원인 확인).
+      if (action !== 'MESSAGE' && action !== 'IN' && action !== 'OUT') {
+        const fields = message && typeof message === 'object'
+          ? Object.entries(message).filter(([k]) => !/token|secret/i.test(k)).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
+          : String(message ?? '');
+        log(`[이벤트] ${action}${fields ? ' : ' + fields.slice(0, 300) : ''}`);
+      }
       if (action === 'LOGIN') log('SOOP 채팅 로그인 이벤트 수신');
       if (action === 'JOIN') reportProfile(message?.userId, message?.userNickname, 'JOIN');
       if (action === 'NICKNAME_CHANGED' && (message?.userStatus?.isBJ || (ownUserId && message?.userId === ownUserId))) {
@@ -195,7 +202,7 @@
       const balloons = Number(message?.count);
       const soopId = String(message?.bjId || activeStreamerId || '').trim();
       if (!Number.isSafeInteger(balloons) || balloons <= 0 || !soopId) {
-        log('별풍선 이벤트에 유효한 수량 또는 방송 ID가 없어 무시했습니다.');
+        log(`별풍선 이벤트에 유효한 수량 또는 방송 ID가 없어 무시했습니다. (count=${message?.count}, bjId=${message?.bjId}, 현재 방송=${activeStreamerId || '없음'})`);
         return;
       }
 
