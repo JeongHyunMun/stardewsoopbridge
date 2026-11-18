@@ -24,6 +24,7 @@
     <li>상태: <strong id="connection">연결 안 됨</strong></li>
     <li>인증 계정 ID: <code id="accountId">-</code></li>
     <li>방송 ID (bjId): <code id="bjId">-</code></li>
+    <li>방송 닉네임: <code id="nickname">-</code></li>
     <li>채팅방 번호: <code id="chatNumber">-</code></li>
   </ul>
   <h2>최근 기록</h2><pre id="log" class="status">프로그램 시작</pre>
@@ -117,6 +118,35 @@
     }
   }
 
+  // 본인 방송에 접속하므로 JOIN 이벤트의 사용자 = 방송 스트리머다.
+  // 그 닉네임을 로컬 서버로 보내면 로컬 서버가 Central 관리자 서버에 전달한다.
+  let reportedProfile = '';
+  let ownUserId = '';
+  async function reportProfile(userId, nickname, source) {
+    const soopId = String(userId || activeStreamerId || '').trim();
+    const name = String(nickname || '').trim();
+    if (!soopId || !name) return;
+    ownUserId = soopId;
+    $('nickname').textContent = name;
+    const key = `${soopId}\n${name}`;
+    if (reportedProfile === key) return;
+    try {
+      const response = await fetch('/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soopId, nickname: name })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      reportedProfile = key;
+      log(data.forwarded
+        ? `방송 닉네임을 관리자 서버에 등록했습니다: ${name} (${source})`
+        : `방송 닉네임 확인: ${name}. ${data.reason || ''}`);
+    } catch (error) {
+      log(`방송 닉네임 전달 실패: ${error?.message || error}`);
+    }
+  }
+
   function createChat() {
     if (chat) return;
     chat = new window.SOOP.ChatSDK(config.clientId, config.clientSecret);
@@ -156,6 +186,10 @@
 
     chat.handleMessageReceived((action, message) => {
       if (action === 'LOGIN') log('SOOP 채팅 로그인 이벤트 수신');
+      if (action === 'JOIN') reportProfile(message?.userId, message?.userNickname, 'JOIN');
+      if (action === 'NICKNAME_CHANGED' && (message?.userStatus?.isBJ || (ownUserId && message?.userId === ownUserId))) {
+        reportProfile(message?.userId, message?.userNickname, '닉네임 변경');
+      }
       if (action !== 'BALLOON_GIFTED') return;
 
       const balloons = Number(message?.count);
@@ -285,6 +319,9 @@
     localStorage.removeItem('soop_access_token');
     localStorage.removeItem('soop_refresh_token');
     localStorage.removeItem('soop_account_id');
+    reportedProfile = '';
+    ownUserId = '';
+    $('nickname').textContent = '-';
     $('connection').textContent = '연결 안 됨';
     $('accountId').textContent = '-';
     $('bjId').textContent = '-';
